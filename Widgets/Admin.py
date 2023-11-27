@@ -1,11 +1,6 @@
 from PyQt6.QtWidgets import QMainWindow, QPushButton, QTabWidget, QDialog
 
 
-class CheckOutWindow(QDialog):
-    def __init__(self):
-        super().__init__()
-
-
 class AdminWindow(QMainWindow):
     def __init__(self):
         super().__init__()

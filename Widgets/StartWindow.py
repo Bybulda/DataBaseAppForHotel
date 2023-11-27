@@ -2,7 +2,7 @@ import sys
 
 from PyQt6.QtWidgets import QApplication, QDialog, QVBoxLayout, QPushButton
 
-from Admin import AdminWindow
+from AuthWindow import AuthWindow
 from Visitor import HotelBookingApp
 
 
@@ -23,7 +23,7 @@ class StartWindow(QDialog):
         layout.addWidget(visitor_button)
 
     def open_admin_window(self):
-        self.admin_window = AdminWindow()
+        self.admin_window = AuthWindow()
         self.admin_window.show()
         self.accept()
 

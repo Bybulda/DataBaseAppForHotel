@@ -1,7 +1,8 @@
 import sys
 
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication, QMainWindow, QLineEdit, QPushButton, QCalendarWidget, \
-    QVBoxLayout, QWidget, QFormLayout, QComboBox, QMessageBox, QTabWidget
+    QVBoxLayout, QWidget, QFormLayout, QComboBox, QMessageBox, QTabWidget, QLabel
 
 
 class HotelBookingApp(QMainWindow):
@@ -9,6 +10,7 @@ class HotelBookingApp(QMainWindow):
         super().__init__()
         self.last_booking_info = {"SNP": '', "Price": 0, "Room_type": "", "Room_id": 0, "Date_start": '',
                                   "Date_end": ''}
+        self.status_booking = False
 
         self.init_ui()
 
@@ -26,8 +28,8 @@ class HotelBookingApp(QMainWindow):
         view_action = self.show_view()
         self.tab_widget.addTab(view_action, 'Просмотреть брони')
 
-        receipt_action = QPushButton('Получить чек')
-        receipt_action.clicked.connect(self.show_receipt_dialog)
+        receipt_action = self.show_receipt()
+
         self.tab_widget.addTab(receipt_action, 'Получить чек')
         self.setCentralWidget(self.tab_widget)
 
@@ -82,6 +84,12 @@ class HotelBookingApp(QMainWindow):
 
         # Здесь можно добавить логику для обработки данных (например, отправка запроса на сервер или сохранение в базе данных)
         print(f'Бронирование: {name}, {gender}, {passport}, {phone}, {room_type}, {start_date}, {end_date}')
+        # Проверка на входные данные
+        self.receipt.setText(
+            f'Уважаемый гость: {name}, вы успешно забронировали комнату!\nБронирование содержит следующую информацию:\n '
+            f'ФИО посетителя: {name}\n'
+            f'Пол: {gender}\n'
+            f'Паспорт: {passport}\nТип комнаты: {room_type}\nДата заселения: {start_date}\nДата выселения: {end_date}\nСтоимость: {2700}')
         self.show_book_dialog(True)
 
     def show_book_dialog(self, statement):
@@ -174,12 +182,18 @@ class HotelBookingApp(QMainWindow):
         view_dialog.setText('Просмотр текущих броней')
         view_dialog.exec()
 
-    def show_receipt_dialog(self):
+    def show_receipt(self):
         # Окно для получения чека
-        receipt_dialog = QMessageBox(self)
-        receipt_dialog.setWindowTitle('Информация')
-        receipt_dialog.setText('Чек успешно получен!')
-        receipt_dialog.exec()
+        self.receipt = QLabel("Здесь будет отображаться информация о бронировании.", self)
+        self.receipt.setStyleSheet(''' font-size: 14px; 
+        ''')
+        self.receipt.setAlignment(Qt.AlignmentFlag.AlignJustify | Qt.AlignmentFlag.AlignHCenter)
+        self.receipt.setWordWrap(False)
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.receipt)
+        main_widget = QWidget()
+        main_widget.setLayout(layout)
+        return main_widget
 
 
 def main():
