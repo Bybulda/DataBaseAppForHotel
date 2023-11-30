@@ -22,6 +22,9 @@ class StartWindow(QDialog):
         layout.addWidget(admin_button)
         layout.addWidget(visitor_button)
 
+    def __del__(self):
+        pass
+
     def open_admin_window(self):
         self.admin_window = AuthWindow()
         self.admin_window.show()

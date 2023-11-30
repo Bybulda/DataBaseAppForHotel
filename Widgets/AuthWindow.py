@@ -1,7 +1,8 @@
+import configparser
 import sys
 
-from PyQt6.QtWidgets import QApplication, QDialog, QVBoxLayout, QPushButton, QLineEdit, QMessageBox, QLabel
-import configparser
+from PyQt6.QtWidgets import QApplication, QDialog, QVBoxLayout, QPushButton, QLineEdit, QMessageBox
+
 from Admin import AdminWindow
 
 
@@ -19,7 +20,6 @@ class AuthWindow(QDialog):
         self.login.setPlaceholderText("Логин")
         self.password = QLineEdit()
         self.password.setPlaceholderText("Пароль")
-
 
         layout = QVBoxLayout(self)
         layout.addWidget(self.login)
@@ -51,7 +51,6 @@ class AuthWindow(QDialog):
         self.admin_window = AdminWindow()
         self.admin_window.show()
         self.accept()
-
 
 
 def main():
