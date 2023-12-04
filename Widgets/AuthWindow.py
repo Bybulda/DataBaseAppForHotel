@@ -35,7 +35,8 @@ class AuthWindow(QDialog):
         return login == real_l and password == real_p
 
     def auth_error(self):
-        box = QMessageBox(self).setWindowTitle("Ошибка входа!")
+        box = QMessageBox(self)
+        box.setWindowTitle("Ошибка входа!")
         box.setText("Вы допустили ошибку в вводе логина/пароля, пожалуйста, попробуйте ещё раз!")
         box.exec()
 

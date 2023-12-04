@@ -4,7 +4,7 @@ import sys
 import psycopg2
 from PyQt6.QtCore import QDateTime
 from PyQt6.QtWidgets import QMainWindow, QPushButton, QTabWidget, QApplication, QWidget, QTableWidget, QVBoxLayout, \
-    QLineEdit, QLabel, QDateTimeEdit, QComboBox
+    QLineEdit, QLabel, QDateTimeEdit, QComboBox, QTableWidgetItem
 
 
 class AdminWindow(QMainWindow):
@@ -69,6 +69,7 @@ class AdminWindow(QMainWindow):
         self.view_schedule.setHorizontalHeaderLabels(
             ["ID Расписания", "ID Задачи", "ID Персонала", "ID Комнаты", "Дата начала", "Дата конца", "Занятость"])
         self.refresh_view = QPushButton("Обновить таблицы")
+        self.refresh_view.clicked.connect(self.refresh_accept)
         self.empl_label = QLabel("Таблица сотрудников")
         self.schdl_label = QLabel("Таблица расписания задач")
         view_widget_layout.addWidget(self.refresh_view)
@@ -79,7 +80,36 @@ class AdminWindow(QMainWindow):
         view_widget.setLayout(view_widget_layout)
         return view_widget
 
-    # endregion view
+    def refresh_accept(self):
+        query_emp = 'select * from hotel_schema.staff'
+        query_tasks = 'select * from hotel_schema.schedule'
+        self.cur.execute(query_emp)
+        emp_res = self.cur.fetchall()
+
+        for row, employee in enumerate(emp_res):
+            self.view_employee.insertRow(row)
+            snp = []
+            col = 0
+            for j, item in enumerate(employee):
+                if 0 < j < 4:
+                    snp.append(item)
+                    continue
+                elif j == 4:
+                    col = 2
+                self.view_employee.setItem(row, col, QTableWidgetItem(str(item)))
+                col += 1
+            self.view_employee.setItem(row, 1, QTableWidgetItem(" ".join(snp)))
+
+        self.cur.execute(query_tasks)
+        schdl_res = self.cur.fetchall()
+
+        for row, task in enumerate(schdl_res):
+            self.view_schedule.insertRow(row)
+            for col, item in enumerate(task):
+                self.view_schedule.setItem(row, col, QTableWidgetItem(str(item)))
+
+
+        # endregion view
     # region user
     def show_delete_user(self):
         # Remove Visitor Tab
@@ -199,9 +229,9 @@ class AdminWindow(QMainWindow):
 
         # Combo box for selecting action (Add, Remove, or Update Salary)
         self.action_combo_box = QComboBox(self)
-        self.action_combo_box.addItem("Add Employee")
-        self.action_combo_box.addItem("Remove Employee")
-        self.action_combo_box.addItem("Update Salary")
+        self.action_combo_box.addItem("Добавить сотрудника")
+        self.action_combo_box.addItem("Удалить сотрудника")
+        self.action_combo_box.addItem("Изменить зарплату")
         self.action_combo_box.currentIndexChanged.connect(self.update_ui)
         layout.addWidget(self.action_combo_box)
 
@@ -211,27 +241,27 @@ class AdminWindow(QMainWindow):
         self.experience_line_edit = QLineEdit(self)
         self.salary_line_edit = QLineEdit(self)
 
-        layout.addWidget(QLabel("Full Name:"))
+        layout.addWidget(QLabel("ФИО:"))
         layout.addWidget(self.fio_line_edit)
 
-        layout.addWidget(QLabel("Passport:"))
+        layout.addWidget(QLabel("Паспорт:"))
         layout.addWidget(self.passport_line_edit)
-
-        layout.addWidget(QLabel("Experience (years):"))
+        self.exp = QLabel("Опыт (в годах):")
+        layout.addWidget(self.exp)
         layout.addWidget(self.experience_line_edit)
-
-        layout.addWidget(QLabel("Salary:"))
+        self.salare = QLabel("Зарплата:")
+        layout.addWidget(self.salare)
         layout.addWidget(self.salary_line_edit)
 
         # Button for managing employee based on selected action
-        self.employee_button = QPushButton("Add Employee", self)
+        self.employee_button = QPushButton("Добавить пользователя", self)
         self.employee_button.clicked.connect(self.manage_employee)
         layout.addWidget(self.employee_button)
 
         # Table to display employee data
         self.employee_table_widget = QTableWidget(self)
         self.employee_table_widget.setColumnCount(4)
-        self.employee_table_widget.setHorizontalHeaderLabels(["Full Name", "Passport", "Experience", "Salary"])
+        self.employee_table_widget.setHorizontalHeaderLabels(["ФИО", "Паспорт", "Опыт", "Зарплата"])
         layout.addWidget(self.employee_table_widget)
 
         self.employee_widget.setLayout(layout)
@@ -241,30 +271,37 @@ class AdminWindow(QMainWindow):
         # Dynamically update UI based on selected action
         selected_action = self.action_combo_box.currentText()
 
-        if selected_action == "Add Employee":
+        if selected_action == "Добавить сотрудника":
             self.experience_line_edit.show()
+            self.salare.show()
+            self.exp.show()
             self.salary_line_edit.show()
-            self.employee_button.setText("Add Employee")
-        elif selected_action == "Remove Employee":
+            self.employee_button.setText("Добавить сотрудника")
+        elif selected_action == "Удалить сотрудника":
             self.experience_line_edit.hide()
+
+            self.salare.hide()
+            self.exp.hide()
             self.salary_line_edit.hide()
-            self.employee_button.setText("Remove Employee")
-        elif selected_action == "Update Salary":
+            self.employee_button.setText("Удалить сотрудника")
+        elif selected_action == "Изменить зарплату":
             self.experience_line_edit.hide()
+            self.salare.show()
+            self.exp.hide()
             self.salary_line_edit.show()
-            self.employee_button.setText("Update Salary")
+            self.employee_button.setText("Изменить зарплату")
 
     def manage_employee(self):
         # Implement logic based on selected action
         selected_action = self.action_combo_box.currentText()
 
-        if selected_action == "Add Employee":
+        if selected_action == "Добавить сотрудника":
             # Implement logic to add employee to the database
             pass
-        elif selected_action == "Remove Employee":
+        elif selected_action == "Удалить сотрудника":
             # Implement logic to remove employee from the database
             pass
-        elif selected_action == "Update Salary":
+        elif selected_action == "Изменить зарплату":
             # Implement logic to update employee's salary in the database
             pass
 

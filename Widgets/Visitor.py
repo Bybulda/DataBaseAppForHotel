@@ -1,10 +1,11 @@
+import configparser
 import sys
 
+import psycopg2
+import PyQt6.QtGui
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication, QMainWindow, QLineEdit, QPushButton, QCalendarWidget, \
-    QVBoxLayout, QWidget, QFormLayout, QComboBox, QMessageBox, QTabWidget, QLabel
-import configparser
-import psycopg2
+    QVBoxLayout, QWidget, QFormLayout, QComboBox, QMessageBox, QTabWidget, QLabel, QTableWidget, QTableWidgetItem
 
 
 class HotelBookingApp(QMainWindow):
@@ -23,10 +24,8 @@ class HotelBookingApp(QMainWindow):
         self.tab_widget = QTabWidget()
 
         book_action = self.show_book_room()
-        self.tab_widget.addTab(book_action, 'Забронировать номер')
+        self.tab_widget.addTab(book_action, 'Забронировать/Отменить номер')
 
-        cancel_action = self.show_cancel()
-        self.tab_widget.addTab(cancel_action, 'Отменить бронь')
 
         view_action = self.show_view()
         self.tab_widget.addTab(view_action, 'Просмотреть брони')
@@ -53,9 +52,12 @@ class HotelBookingApp(QMainWindow):
     # region booking
     def show_book_room(self):
         # Создание виджетов для ввода данных
+        self.bookin_option = QComboBox(self)
+        self.bookin_option.addItems(['Забронировать', 'Отменить бронь'])
+        self.bookin_option.currentIndexChanged.connect(self.update_booking)
         self.name_input = QLineEdit(self)
         self.gender_input = QComboBox(self)
-        self.gender_input.addItems(['Male', 'Female', 'Other'])
+        self.gender_input.addItems(['Мужской', 'Женский'])
         self.passport_input = QLineEdit(self)
         self.phone_input = QLineEdit(self)
         self.room_type_input = QComboBox(self)
@@ -65,10 +67,11 @@ class HotelBookingApp(QMainWindow):
 
         # Создание кнопки для бронирования
         self.book_button = QPushButton('Забронировать', self)
-        self.book_button.clicked.connect(self.book_room)
+        self.book_button.clicked.connect(self.book_action)
 
         # Создание формы
         form_layout = QFormLayout()
+        form_layout.addRow('Опция', self.bookin_option)
         form_layout.addRow('ФИО:', self.name_input)
         form_layout.addRow('Пол:', self.gender_input)
         form_layout.addRow('Паспорт:', self.passport_input)
@@ -89,15 +92,29 @@ class HotelBookingApp(QMainWindow):
         self.setCentralWidget(main_widget)
         return main_widget
 
-    def book_room(self):
+    def update_booking(self):
+        text = self.bookin_option.currentText()
+        self.book_button.setText(text)
+
+    def book_room(self, name, phone, passport, gender, room_type, start_date, end_date):
+        pass
+
+    def cancel_room(self, name, phone, passport, gender, room_type, start_date, end_date):
+        pass
+
+    def book_action(self):
         # Получение данных из полей ввода
         name = self.name_input.text()
         gender = self.gender_input.currentText()
         passport = self.passport_input.text()
         phone = self.phone_input.text()
         room_type = self.room_type_input.currentText()
-        start_date = self.start_date_input.selectedDate().toString('yyyy-MM-dd HH:mm')
-        end_date = self.end_date_input.selectedDate().toString('yyyy-MM-dd HH:mm')
+        start_date = self.start_date_input.selectedDate().toString('yyyy-MM-dd')
+        end_date = self.end_date_input.selectedDate().toString('yyyy-MM-dd')
+        if self.book_button.text() == "Забронировать":
+            self.book_room(name, phone, passport, gender, room_type, start_date, end_date)
+        else:
+            self.cancel_room(name, phone, passport, gender, room_type, start_date, end_date)
 
         # Здесь можно добавить логику для обработки данных (например, отправка запроса на сервер или сохранение в базе данных)
         print(f'Бронирование: {name}, {gender}, {passport}, {phone}, {room_type}, {start_date}, {end_date}')
@@ -120,42 +137,6 @@ class HotelBookingApp(QMainWindow):
         book_dialog.exec()
 
     # endregion
-    def show_cancel(self):
-        self.name_del = QLineEdit(self)
-        self.gender_del = QComboBox(self)
-        self.gender_del.addItems(['Male', 'Female', 'Other'])
-        self.passport_del = QLineEdit(self)
-        self.phone_del = QLineEdit(self)
-        self.room_type_del = QComboBox(self)
-        self.room_type_del.addItems(['Classic', 'Comfort', 'Lux'])
-        self.start_date_del = QCalendarWidget(self)
-        self.end_date_del = QCalendarWidget(self)
-
-        # Создание кнопки для бронирования
-        self.book_del = QPushButton('Удалить бронь', self)
-        self.book_del.clicked.connect(self.show_cancel_dialog)
-
-        # Создание формы
-        form_layout = QFormLayout()
-        form_layout.addRow('ФИО:', self.name_del)
-        form_layout.addRow('Пол:', self.gender_del)
-        form_layout.addRow('Паспорт:', self.passport_del)
-        form_layout.addRow('Телефон:', self.phone_del)
-        form_layout.addRow('Тип комнаты:', self.room_type_del)
-        form_layout.addRow('Дата начала:', self.start_date_del)
-        form_layout.addRow('Дата конца:', self.end_date_del)
-        form_layout.addRow(self.book_del)
-
-        # Основной макет
-        main_layout = QVBoxLayout()
-        main_layout.addLayout(form_layout)
-
-        # Основной виджет
-        main_widget = QWidget(self)
-        main_widget.setLayout(main_layout)
-
-        self.setCentralWidget(main_widget)
-        return main_widget
 
     def show_cancel_dialog(self):
         # Окно для отмены бронирования
@@ -167,18 +148,22 @@ class HotelBookingApp(QMainWindow):
     def show_view(self):
         self.name_view = QLineEdit(self)
         self.gender_view = QComboBox(self)
-        self.gender_view.addItems(['Male', 'Female', 'Other'])
+        self.gender_view.addItems(["Мужской", "Женский"])
         self.passport_view = QLineEdit(self)
 
         # Создание кнопки для бронирования
         self.view_button = QPushButton('Просмотреть все брони', self)
         self.view_button.clicked.connect(self.show_view_dialog)
+        self.booking_table = QTableWidget(self)
+        self.booking_table.setColumnCount(4)
+        self.booking_table.setHorizontalHeaderLabels(["ФИО", "Номер комнаты", "Дата заселения", "Дата выселения"])
 
         # Создание формы
         form_layout = QFormLayout()
         form_layout.addRow('ФИО:', self.name_view)
         form_layout.addRow('Пол:', self.gender_view)
         form_layout.addRow('Паспорт:', self.passport_view)
+        form_layout.addRow(self.booking_table)
         form_layout.addRow(self.view_button)
 
         # Основной макет
@@ -193,12 +178,31 @@ class HotelBookingApp(QMainWindow):
         return main_widget
 
     def show_view_dialog(self):
-        # Окно для просмотра броней
-        view_dialog = QMessageBox(self)
-        view_dialog.setWindowTitle('Информация')
-        view_dialog.setText('Просмотр текущих броней')
-        # '''Select * from hotel_schema.booking where id = (select a.id from hotel_schema.visitor where ФИО и паспорт совпадают)'''
-        view_dialog.exec()
+         # Окно для просмотра броней
+        query = "select room_id, settle_datetime, eviction_datetime from hotel_schema.booking " \
+                "where visitor_id = (select visitor_id from hotel_schema.visitor where passport = %s and " \
+                "name = %s and surname = %s and patronymic = %s)"
+        try:
+            self.booking_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+            passport = int(self.passport_view.text())
+            name, surname, patr = self.name_view.text().split()
+            self.cur.execute(query, (passport, name, surname, patr))
+            res = self.cur.fetchall()
+            self.booking_table.setRowCount(0)
+            for row, value in enumerate(res):
+                self.booking_table.insertRow(row)
+                self.booking_table.setItem(row, 0, QTableWidgetItem(self.name_view.text()))
+                for col in range(1, len(value) + 1):
+                    self.booking_table.setItem(row, col, QTableWidgetItem(str(value[col - 1])))
+
+        except Exception:
+            self.show_box('Ошибка', 'Скорее всего вы допустили ошибку в указании данных, проверьте их ещё раз')
+
+    def show_box(self, title, message):
+        cancel_dialog = QMessageBox(self)
+        cancel_dialog.setWindowTitle(title)
+        cancel_dialog.setText(message)
+        cancel_dialog.exec()
 
     def show_receipt(self):
         # Окно для получения чека
