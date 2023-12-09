@@ -2,13 +2,14 @@ import configparser
 import sys
 
 import psycopg2
+from query.adminQuery import *
 from PyQt6.QtCore import QDateTime
 from PyQt6.QtWidgets import QMainWindow, QPushButton, QTabWidget, QApplication, QWidget, QTableWidget, QVBoxLayout, \
-    QLineEdit, QLabel, QDateTimeEdit, QComboBox, QTableWidgetItem
+    QLineEdit, QLabel, QDateTimeEdit, QComboBox, QTableWidgetItem, QMessageBox
 
 
 class AdminWindow(QMainWindow):
-    def __init__(self, config_file='../config.ini'):
+    def __init__(self, config_file='../config/config.ini'):
         super().__init__()
         self.open_connection(config_file)
         self.init_ui()
@@ -24,7 +25,8 @@ class AdminWindow(QMainWindow):
                                      password=config.getint("databaseN", "password"),
                                      host=config.get("databaseN", "host"),
                                      port=config.get("databaseN", "port"),
-                                     database=config.get("databaseN", "database"))
+                                     database=config.get("databaseN", "database"),
+                                     options="-c search_path=" + config.get("databaseN", "schema"))
         self.cur = self.conn.cursor()
 
     def init_ui(self):
@@ -81,8 +83,8 @@ class AdminWindow(QMainWindow):
         return view_widget
 
     def refresh_accept(self):
-        query_emp = 'select * from hotel_schema.staff'
-        query_tasks = 'select * from hotel_schema.schedule'
+        # query_emp = 'select * from staff'
+        # query_tasks = 'select * from schedule'
         self.cur.execute(query_emp)
         emp_res = self.cur.fetchall()
 
@@ -108,8 +110,7 @@ class AdminWindow(QMainWindow):
             for col, item in enumerate(task):
                 self.view_schedule.setItem(row, col, QTableWidgetItem(str(item)))
 
-
-        # endregion view
+    # endregion view
     # region user
     def show_delete_user(self):
         # Remove Visitor Tab
@@ -147,19 +148,42 @@ class AdminWindow(QMainWindow):
         return remove_visitor_tab
 
     def search_visitor(self):
-        pass
+        surname, name, patronymic = (i.lower().capitalize() for i in self.fio_line_edit.text().split())
+        passport = int(self.passport_line_edit.text())
+        self.cur.execute(search_user_query, (name, surname, patronymic, passport))
+        res = self.cur.fetchone()
+        if len(res) == 0:
+            self.show_box('Пользователь не найден!', "Пользователь не найден!")
+            return
+        table_for = []
+        fio = []
+        for i, j in enumerate(res):
+            if 0 < i < 4:
+                fio.append(j)
+                continue
+            elif i == 4:
+                table_for.append(' '.join(fio))
+            table_for.append(j)
+
+        self.visitor_table_widget.insertRow(0)
+        for col, item in enumerate(table_for):
+            self.visitor_table_widget.setItem(0, col, QTableWidgetItem(str(item)))
 
     def delete_visitor(self):
-        # Логика удаления посетителя или сотрудника
-        pass
+        if self.visitor_table_widget.item(0, 0) is None:
+            self.show_box('Ошибка удаления', "Пожалуйста, для начала нажмите на кнопку \"Найти пользователя\" и убедитесь что информацию о нем вывело на экран!")
+            return
+
+        print(self.visitor_table_widget.item(0, 0))
+        passport = int(self.visitor_table_widget.item(0, 2))
+        self.visitor_table_widget.clearContents()
+        self.visitor_table_widget.removeRow(0)
+        self.cur.execute(delete_user_query, (passport,))
+        self.conn.commit()
 
     # endregion user
     # region task
     def show_delete_task(self):
-        layout = QVBoxLayout()
-
-        # Tab widget to switch between Add Task and Remove Visitor tabs
-        tab_widget = QTabWidget()
 
         # Add Task Tab
         add_task_tab = QWidget()
@@ -236,16 +260,16 @@ class AdminWindow(QMainWindow):
         layout.addWidget(self.action_combo_box)
 
         # Fields for input
-        self.fio_line_edit = QLineEdit(self)
-        self.passport_line_edit = QLineEdit(self)
+        self.fio_emp = QLineEdit(self)
+        self.passport_emp = QLineEdit(self)
         self.experience_line_edit = QLineEdit(self)
         self.salary_line_edit = QLineEdit(self)
 
         layout.addWidget(QLabel("ФИО:"))
-        layout.addWidget(self.fio_line_edit)
+        layout.addWidget(self.fio_emp)
 
         layout.addWidget(QLabel("Паспорт:"))
-        layout.addWidget(self.passport_line_edit)
+        layout.addWidget(self.passport_emp)
         self.exp = QLabel("Опыт (в годах):")
         layout.addWidget(self.exp)
         layout.addWidget(self.experience_line_edit)
@@ -329,6 +353,11 @@ class AdminWindow(QMainWindow):
         pass
 
     # endregion
+    def show_box(self, title, message):
+        cancel_dialog = QMessageBox(self)
+        cancel_dialog.setWindowTitle(title)
+        cancel_dialog.setText(message)
+        cancel_dialog.exec()
 
 
 def main():

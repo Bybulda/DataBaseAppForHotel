@@ -1,15 +1,28 @@
 import configparser
 import sys
+import datetime
 
 import psycopg2
-import PyQt6.QtGui
+from query.visitorQuery import *
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication, QMainWindow, QLineEdit, QPushButton, QCalendarWidget, \
     QVBoxLayout, QWidget, QFormLayout, QComboBox, QMessageBox, QTabWidget, QLabel, QTableWidget, QTableWidgetItem
 
 
+def validate_info(name, phone, passport):
+    if name == '' or phone == '' or passport == '':
+        return False
+    splitter = name.split()
+    if len(splitter) == 3:
+        sm = sum(0 if i.isalpha() else 1 for i in splitter)
+        if sm == 0:
+            if len(passport) == 10:
+                return True
+    return False
+
+
 class HotelBookingApp(QMainWindow):
-    def __init__(self, config_file='../config.ini'):
+    def __init__(self, config_file='../config/config.ini'):
         super().__init__()
         self.last_booking_info = {"SNP": '', "Price": 0, "Room_type": "", "Room_id": 0, "Date_start": '',
                                   "Date_end": ''}
@@ -25,7 +38,6 @@ class HotelBookingApp(QMainWindow):
 
         book_action = self.show_book_room()
         self.tab_widget.addTab(book_action, 'Забронировать/Отменить номер')
-
 
         view_action = self.show_view()
         self.tab_widget.addTab(view_action, 'Просмотреть брони')
@@ -46,7 +58,8 @@ class HotelBookingApp(QMainWindow):
                                      password=config.getint("databaseN", "password"),
                                      host=config.get("databaseN", "host"),
                                      port=config.get("databaseN", "port"),
-                                     database=config.get("databaseN", "database"))
+                                     database=config.get("databaseN", "database"),
+                                     options="-c search_path=" + config.get("databaseN", "schema"))
         self.cur = self.conn.cursor()
 
     # region booking
@@ -97,7 +110,39 @@ class HotelBookingApp(QMainWindow):
         self.book_button.setText(text)
 
     def book_room(self, name, phone, passport, gender, room_type, start_date, end_date):
-        pass
+        if not validate_info(name, phone, passport):
+            self.show_box("Ошибка", "Вы ввели некорректные данные, попробуйте ещё раз!")
+            return
+        name_, surname, patron = [(i.lower()).capitalize() for i in name.split()]
+        start_date, end_date = '-'.join(str(i) for i in start_date), '-'.join(str(i) for i in end_date)
+
+        try:
+            self.cur.execute(serach_query, (name_, surname, patron, str(passport)))
+            srch = self.cur.fetchone()
+            if len(srch) == 0:
+                self.cur.execute(insrt_vis)
+                self.conn.commit()
+                self.cur.execute(serach_query)
+                srch = self.cur.fetchone()
+            self.cur.execute(search_room_time)
+            room_id = self.cur.fetchone()
+            if len(room_id) == 0:
+                self.show_box('Внимание', 'На текущий промежуток нет свободных комнат!')
+                return
+            self.cur.execute(insrt_book, (srch[0], room_id, start_date, end_date))
+            self.conn.commit()
+            self.cur.execute(room_price, (room_type,))
+            price = self.cur.fetchone()[0]
+            real_price = (datetime.datetime.strptime(end_date, "%Y-%m-%d")
+                          - datetime.datetime.strptime(start_date, "%Y-%m-%d")).days * price
+            self.show_box('Информация', 'Вы успешно забронировали номер!')
+            self.receipt.setText(
+                f'Уважаемый гость: {name}, вы успешно забронировали комнату!\nБронирование содержит следующую информацию:\n '
+                f'ФИО посетителя: {name}\n'
+                f'Пол: {gender}\n'
+                f'Паспорт: {passport}\nТип комнаты: {room_type}\nДата заселения: {start_date}\nДата выселения: {end_date}\nСтоимость: {real_price}')
+        except Exception:
+            self.show_box('Что-то пошло не так', 'Пожалуйста повторите позже!')
 
     def cancel_room(self, name, phone, passport, gender, room_type, start_date, end_date):
         pass
@@ -109,8 +154,8 @@ class HotelBookingApp(QMainWindow):
         passport = self.passport_input.text()
         phone = self.phone_input.text()
         room_type = self.room_type_input.currentText()
-        start_date = self.start_date_input.selectedDate().toString('yyyy-MM-dd')
-        end_date = self.end_date_input.selectedDate().toString('yyyy-MM-dd')
+        start_date = self.start_date_input.selectedDate().getDate()
+        end_date = self.end_date_input.selectedDate().getDate()
         if self.book_button.text() == "Забронировать":
             self.book_room(name, phone, passport, gender, room_type, start_date, end_date)
         else:
@@ -119,12 +164,6 @@ class HotelBookingApp(QMainWindow):
         # Здесь можно добавить логику для обработки данных (например, отправка запроса на сервер или сохранение в базе данных)
         print(f'Бронирование: {name}, {gender}, {passport}, {phone}, {room_type}, {start_date}, {end_date}')
         # Проверка на входные данные
-        self.receipt.setText(
-            f'Уважаемый гость: {name}, вы успешно забронировали комнату!\nБронирование содержит следующую информацию:\n '
-            f'ФИО посетителя: {name}\n'
-            f'Пол: {gender}\n'
-            f'Паспорт: {passport}\nТип комнаты: {room_type}\nДата заселения: {start_date}\nДата выселения: {end_date}\nСтоимость: {2700}')
-        self.show_book_dialog(True)
 
     def show_book_dialog(self, statement):
         # Окно для бронирования
@@ -137,13 +176,6 @@ class HotelBookingApp(QMainWindow):
         book_dialog.exec()
 
     # endregion
-
-    def show_cancel_dialog(self):
-        # Окно для отмены бронирования
-        cancel_dialog = QMessageBox(self)
-        cancel_dialog.setWindowTitle('Информация')
-        cancel_dialog.setText('Бронь отменена!')
-        cancel_dialog.exec()
 
     def show_view(self):
         self.name_view = QLineEdit(self)
@@ -174,18 +206,17 @@ class HotelBookingApp(QMainWindow):
         main_widget = QWidget(self)
         main_widget.setLayout(main_layout)
 
-        self.setCentralWidget(main_widget)
         return main_widget
 
     def show_view_dialog(self):
-         # Окно для просмотра броней
+        # Окно для просмотра броней
         query = "select room_id, settle_datetime, eviction_datetime from hotel_schema.booking " \
                 "where visitor_id = (select visitor_id from hotel_schema.visitor where passport = %s and " \
                 "name = %s and surname = %s and patronymic = %s)"
         try:
             self.booking_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
             passport = int(self.passport_view.text())
-            name, surname, patr = self.name_view.text().split()
+            surname, name, patr = self.name_view.text().split()
             self.cur.execute(query, (passport, name, surname, patr))
             res = self.cur.fetchall()
             self.booking_table.setRowCount(0)

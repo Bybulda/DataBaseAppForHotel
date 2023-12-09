@@ -11,7 +11,7 @@ class AuthWindow(QDialog):
         super().__init__()
 
         self.setWindowTitle('Аутентификация')
-        self.config_file = '../config.ini'
+        self.config_file = '../config/config.ini'
 
         admin_button = QPushButton('Войти в аккаунт')
         admin_button.clicked.connect(self.check_auth)
