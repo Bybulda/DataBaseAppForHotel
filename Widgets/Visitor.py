@@ -6,7 +6,8 @@ import psycopg2
 from query.visitorQuery import *
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication, QMainWindow, QLineEdit, QPushButton, QCalendarWidget, \
-    QVBoxLayout, QWidget, QFormLayout, QComboBox, QMessageBox, QTabWidget, QLabel, QTableWidget, QTableWidgetItem
+    QVBoxLayout, QWidget, QFormLayout, QComboBox, QMessageBox, QTabWidget, QLabel, QTableWidget, QTableWidgetItem, \
+    QFileDialog
 
 
 def validate_info(name, phone, passport):
@@ -24,8 +25,9 @@ def validate_info(name, phone, passport):
 class HotelBookingApp(QMainWindow):
     def __init__(self, config_file='../config/config.ini'):
         super().__init__()
-        self.last_booking_info = {"SNP": '', "Price": 0, "Room_type": "", "Room_id": 0, "Date_start": '',
-                                  "Date_end": ''}
+        self.last_booking_info = {"SNP": '', "Gender": '', "Price": 0, "Room_type": "",
+                                  "Room_id": 0, "Passport": '', "Telephone": '',
+                                  "Date_start": '', "Date_end": ''}
         self.status_booking = False
         self.open_connection(config_file)
 
@@ -109,22 +111,34 @@ class HotelBookingApp(QMainWindow):
         text = self.bookin_option.currentText()
         self.book_button.setText(text)
 
+    def succesffull_booking(self, book_info):
+        self.receipt.setText(
+            f'Уважаемый гость: {book_info[0]}, вы успешно забронировали комнату!\nБронирование содержит следующую информацию:\n '
+            f'ФИО посетителя: {book_info[0]}\n'
+            f'Пол: {book_info[1]}\n'
+            f'Паспорт: {book_info[5]}\nТип комнаты: {book_info[3]}\n'
+            f'Дата заселения: {book_info[-2]}\n'
+            f'Дата выселения: {book_info[-1]}\nСтоимость: {book_info[2]}')
+        for i, key in enumerate(self.last_booking_info.keys()):
+            self.last_booking_info[key] = book_info[i]
+
+
     def book_room(self, name, phone, passport, gender, room_type, start_date, end_date):
         if not validate_info(name, phone, passport):
             self.show_box("Ошибка", "Вы ввели некорректные данные, попробуйте ещё раз!")
             return
-        name_, surname, patron = [(i.lower()).capitalize() for i in name.split()]
+        surname, name_, patron = [(i.lower()).capitalize() for i in name.split()]
         start_date, end_date = '-'.join(str(i) for i in start_date), '-'.join(str(i) for i in end_date)
 
         try:
             self.cur.execute(serach_query, (name_, surname, patron, str(passport)))
             srch = self.cur.fetchone()
             if len(srch) == 0:
-                self.cur.execute(insrt_vis)
+                self.cur.execute(insrt_vis, (name_, surname, patron, passport, phone, gender.lower()))
                 self.conn.commit()
-                self.cur.execute(serach_query)
+                self.cur.execute(serach_query, (name_, surname, patron, str(passport)))
                 srch = self.cur.fetchone()
-            self.cur.execute(search_room_time)
+            self.cur.execute(search_room_time, (room_type.lower(), start_date, end_date))
             room_id = self.cur.fetchone()
             if len(room_id) == 0:
                 self.show_box('Внимание', 'На текущий промежуток нет свободных комнат!')
@@ -135,17 +149,28 @@ class HotelBookingApp(QMainWindow):
             price = self.cur.fetchone()[0]
             real_price = (datetime.datetime.strptime(end_date, "%Y-%m-%d")
                           - datetime.datetime.strptime(start_date, "%Y-%m-%d")).days * price
+            self.succesffull_booking([name, gender, real_price, room_type, room_id, passport, phone, start_date, end_date])
             self.show_box('Информация', 'Вы успешно забронировали номер!')
-            self.receipt.setText(
-                f'Уважаемый гость: {name}, вы успешно забронировали комнату!\nБронирование содержит следующую информацию:\n '
-                f'ФИО посетителя: {name}\n'
-                f'Пол: {gender}\n'
-                f'Паспорт: {passport}\nТип комнаты: {room_type}\nДата заселения: {start_date}\nДата выселения: {end_date}\nСтоимость: {real_price}')
         except Exception:
             self.show_box('Что-то пошло не так', 'Пожалуйста повторите позже!')
 
     def cancel_room(self, name, phone, passport, gender, room_type, start_date, end_date):
-        pass
+        if not validate_info(name, phone, passport):
+            self.show_box("Ошибка", "Вы ввели некорректные данные, попробуйте ещё раз!")
+            return
+        surname, name_, patron = [(i.lower()).capitalize() for i in name.split()]
+        start_date, end_date = '-'.join(str(i) for i in start_date), '-'.join(str(i) for i in end_date)
+        try:
+            self.cur.execute(search_booking_pos, (passport,))
+            res = self.cur.fetchone()
+            if len(res) == 0:
+                self.show_box("Ошибка", "Вы не никогда не бронировали номер в нашем отеле или были удалены из базы!")
+                return
+            self.cur.execute(cancel_booking, (res[0], start_date, end_date))
+            self.conn.commit()
+        except Exception:
+            self.show_box('Ошибка', 'Внимание, скорее всего вы ошиблись при вводе данных, убедитесь что всё ввели правильно!')
+
 
     def book_action(self):
         # Получение данных из полей ввода
@@ -160,10 +185,6 @@ class HotelBookingApp(QMainWindow):
             self.book_room(name, phone, passport, gender, room_type, start_date, end_date)
         else:
             self.cancel_room(name, phone, passport, gender, room_type, start_date, end_date)
-
-        # Здесь можно добавить логику для обработки данных (например, отправка запроса на сервер или сохранение в базе данных)
-        print(f'Бронирование: {name}, {gender}, {passport}, {phone}, {room_type}, {start_date}, {end_date}')
-        # Проверка на входные данные
 
     def show_book_dialog(self, statement):
         # Окно для бронирования
@@ -209,10 +230,6 @@ class HotelBookingApp(QMainWindow):
         return main_widget
 
     def show_view_dialog(self):
-        # Окно для просмотра броней
-        query = "select room_id, settle_datetime, eviction_datetime from hotel_schema.booking " \
-                "where visitor_id = (select visitor_id from hotel_schema.visitor where passport = %s and " \
-                "name = %s and surname = %s and patronymic = %s)"
         try:
             self.booking_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
             passport = int(self.passport_view.text())
@@ -235,15 +252,37 @@ class HotelBookingApp(QMainWindow):
         cancel_dialog.setText(message)
         cancel_dialog.exec()
 
+    def get_receiption(self):
+        if self.last_booking_info['SNP'] == '':
+            self.show_box('Внимание', 'Вы не бронировали комнату или уже отменили на неё бронь!')
+        directory = QFileDialog.getExistingDirectory(
+            self,
+            "Выберите папку для сохранения чека:"
+        )
+
+        with open(f'{directory}{self.last_booking_info["SNP"]}_receipt.txt', 'w') as file:
+            file.write(f'Гость: {self.last_booking_info["SNP"]}\nПаспорт: {self.last_booking_info["Passport"]}\n'
+                f'Телефон: {self.last_booking_info["Telephone"]}\n'
+                f'Пол: {self.last_booking_info["Gender"]}\n'
+                f'Номер комнаты: {self.last_booking_info["Room_id"]}\n'
+                f'Тип комнаты: {self.last_booking_info["Room_type"]}\n'
+                f'Стоимость: {self.last_booking_info["Price"]}\n'
+                f'Дата заселения: {self.last_booking_info["Date_start"]}\n'
+                f'Дата выселения: {self.last_booking_info["Date_end"]}\n')
+        self.show_box('Информация', 'Спасибо что вы с нами!')
+
     def show_receipt(self):
         # Окно для получения чека
         self.receipt = QLabel("Здесь будет отображаться информация о бронировании.", self)
-        self.receipt.setStyleSheet(''' font-size: 14px; 
+        self.receipt.setStyleSheet(''' font-size: 16px; 
         ''')
+        self.get_reciept = QPushButton("Получить чек в формате txt")
+        self.get_reciept.clicked.connect(self.get_receiption)
         self.receipt.setAlignment(Qt.AlignmentFlag.AlignJustify | Qt.AlignmentFlag.AlignHCenter)
         self.receipt.setWordWrap(False)
         layout = QVBoxLayout(self)
         layout.addWidget(self.receipt)
+        layout.addWidget(self.get_reciept)
         main_widget = QWidget()
         main_widget.setLayout(layout)
         return main_widget

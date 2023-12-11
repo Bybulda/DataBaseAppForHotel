@@ -153,7 +153,7 @@ class AdminWindow(QMainWindow):
         self.cur.execute(search_user_query, (name, surname, patronymic, passport))
         res = self.cur.fetchone()
         if len(res) == 0:
-            self.show_box('Пользователь не найден!', "Пользователь не найден!")
+            self.show_box('Ошибка', "Пользователь не найден!")
             return
         table_for = []
         fio = []
@@ -174,12 +174,12 @@ class AdminWindow(QMainWindow):
             self.show_box('Ошибка удаления', "Пожалуйста, для начала нажмите на кнопку \"Найти пользователя\" и убедитесь что информацию о нем вывело на экран!")
             return
 
-        print(self.visitor_table_widget.item(0, 0))
         passport = int(self.visitor_table_widget.item(0, 2))
         self.visitor_table_widget.clearContents()
         self.visitor_table_widget.removeRow(0)
         self.cur.execute(delete_user_query, (passport,))
         self.conn.commit()
+        self.show_box('Информация', 'Посетитель успешно удален!')
 
     # endregion user
     # region task
@@ -188,6 +188,9 @@ class AdminWindow(QMainWindow):
         # Add Task Tab
         add_task_tab = QWidget()
         add_task_layout = QVBoxLayout()
+        self.task_manager = QComboBox(self)
+        self.task_manager.addItems([ 'Добавить задачу', 'Удалить задачу'])
+        self.task_manager.currentIndexChanged.connect(self.update_task_ui)
         self.id_line_edit = QLineEdit(self)
         self.task_line_edit = QLineEdit(self)
         self.room_line_edit = QLineEdit(self)
@@ -208,6 +211,7 @@ class AdminWindow(QMainWindow):
         self.table_widget.setHorizontalHeaderLabels(
             ["ID Перасонала", "ID Задачи", "ID Комнаты", "Дата начала", "Дата конца", "Занятость"])
 
+        add_task_layout.addWidget(self.task_manager)
         add_task_layout.addWidget(QLabel("ID Персонала:"))
         add_task_layout.addWidget(self.id_line_edit)
         add_task_layout.addWidget(QLabel("ID Задачи:"))
@@ -223,15 +227,24 @@ class AdminWindow(QMainWindow):
         add_task_layout.addWidget(self.table_widget)
 
         # Button to add task
-        add_button = QPushButton("Add Task", self)
-        add_button.clicked.connect(self.add_task)
-        add_task_layout.addWidget(add_button)
+        self.add_button = QPushButton('Добавить задачу', self)
+        self.add_button.clicked.connect(self.add_task)
+        add_task_layout.addWidget(self.add_button)
 
         add_task_tab.setLayout(add_task_layout)
 
         # Remove Visitor Tab
 
         return add_task_tab
+
+    def update_task_ui(self):
+        selected_action = self.task_manager.currentText()
+
+        if selected_action == "Удалить задачу":
+            self.add_button.setText("Удалить задачу")
+        elif selected_action == "Добавить задачу":
+
+            self.add_button.setText("Добавить задачу")
 
     def delete_task(self):
         # Логика удаления задачи из расписания
@@ -284,8 +297,8 @@ class AdminWindow(QMainWindow):
 
         # Table to display employee data
         self.employee_table_widget = QTableWidget(self)
-        self.employee_table_widget.setColumnCount(4)
-        self.employee_table_widget.setHorizontalHeaderLabels(["ФИО", "Паспорт", "Опыт", "Зарплата"])
+        self.employee_table_widget.setColumnCount(5)
+        self.employee_table_widget.setHorizontalHeaderLabels(['ID', "ФИО", "Паспорт", "Опыт", "Зарплата"])
         layout.addWidget(self.employee_table_widget)
 
         self.employee_widget.setLayout(layout)
@@ -320,37 +333,72 @@ class AdminWindow(QMainWindow):
         selected_action = self.action_combo_box.currentText()
 
         if selected_action == "Добавить сотрудника":
-            # Implement logic to add employee to the database
-            pass
+            self.add_employee()
         elif selected_action == "Удалить сотрудника":
-            # Implement logic to remove employee from the database
-            pass
+            self.delete_employee()
         elif selected_action == "Изменить зарплату":
-            # Implement logic to update employee's salary in the database
-            pass
+            self.change_salary()
 
-        # Populate and update employee table
-        self.populate_employee_table()
+    def show_employees(self, info, upd=None):
+        self.employee_table_widget.clearContents()
+        self.employee_table_widget.removeRow(0)
+        self.employee_table_widget.insertRow(0)
+        id_, *snp, passport, exp, salary = info
+        salary = salary if upd is None else upd
+        for col, item in enumerate((id_, snp, passport, exp, salary)):
+            self.employee_table_widget.setItem(0, col, QTableWidgetItem(str(item)))
 
-    def populate_employee_table(self):
-        # Implement logic to populate employee table with data from the database
-        pass
+
 
     def delete_employee(self):
-        # Логика добавления сотрудника
-        pass
+        try:
+            surname, name, patronymic = self.fio_emp.text().split()
+            passport = self.passport_emp.text()
+            self.cur.execute(search_empl_query, (passport, name, surname, patronymic))
+            res = self.cur.fetchone()
+            if len(res) == 0:
+                self.show_box('Внимание', 'Такого сотрудника не существует! Пожалуйста, проверьте данные!')
+                return
+            self.cur.execute(delete_empl_query, (passport, name, surname, patronymic))
+            self.conn.commit()
+            self.show_employees(res[0])
+            self.show_box("Информация", "Вы успешно удалили сотрудника")
+        except Exception:
+            self.show_box('Ошибка', 'Произошла ошибка в обработке запроса, возможно вы ввели неправильные данные')
 
     def add_employee(self):
-        # Логика добавления сотрудника
-        pass
-
-    def show_employees(self):
-        # Логика вывода списка сотрудников
-        pass
+        try:
+            surname, name, patronymic = self.fio_emp.text().split()
+            passport = self.passport_emp.text()
+            salary = self.salary_line_edit.text()
+            self.cur.execute(search_empl_query, (passport, name, surname, patronymic))
+            res = self.cur.fetchone()
+            if len(res) == 0:
+                self.show_box('Внимание', 'Такого сотрудника не существует! Пожалуйста, проверьте данные!')
+                return
+            self.cur.execute(update_salary, (salary, passport, name, surname, patronymic))
+            self.conn.commit()
+            self.show_employees(res[0])
+            self.show_box("Информация", "Вы успешно изменили зарплату сотрудника")
+        except Exception:
+            self.show_box('Ошибка', 'Произошла ошибка в обработке запроса, возможно вы ввели неправильные данные')
 
     def change_salary(self):
-        # Логика изменения зарплаты сотрудника
-        pass
+        try:
+            surname, name, patronymic = self.fio_emp.text().split()
+            passport = self.passport_emp.text()
+            salary = self.salary_line_edit.text()
+            self.cur.execute(search_empl_query, (passport, name, surname, patronymic))
+            res = self.cur.fetchone()
+            if len(res) == 0:
+                self.show_box('Внимание', 'Такого сотрудника не существует! Пожалуйста, проверьте данные!')
+                return
+            self.cur.execute(update_salary, (salary, passport, name, surname, patronymic))
+            self.conn.commit()
+            self.show_employees(res[0], salary)
+            self.show_box("Информация", "Вы успешно изменили зарплату сотрудника")
+        except Exception:
+            self.show_box('Ошибка', 'Произошла ошибка в обработке запроса, возможно вы ввели неправильные данные')
 
     # endregion
     def show_box(self, title, message):
