@@ -1,6 +1,7 @@
 import configparser
 import sys
 import datetime
+import os.path as path
 
 import psycopg2
 from query.visitorQuery import *
@@ -122,55 +123,65 @@ class HotelBookingApp(QMainWindow):
         for i, key in enumerate(self.last_booking_info.keys()):
             self.last_booking_info[key] = book_info[i]
 
-
     def book_room(self, name, phone, passport, gender, room_type, start_date, end_date):
         if not validate_info(name, phone, passport):
             self.show_box("Ошибка", "Вы ввели некорректные данные, попробуйте ещё раз!")
             return
         surname, name_, patron = [(i.lower()).capitalize() for i in name.split()]
         start_date, end_date = '-'.join(str(i) for i in start_date), '-'.join(str(i) for i in end_date)
+        start_d, end_d = datetime.datetime.strptime(start_date, "%Y-%m-%d"), datetime.datetime.strptime(end_date, "%Y-%m-%d")
+        if start_d > end_d:
+            self.show_box("Ошибка", "Вы дата начала бронирования должна идти до даты конца бронирования!")
+            return
 
         try:
             self.cur.execute(serach_query, (name_, surname, patron, str(passport)))
             srch = self.cur.fetchone()
-            if len(srch) == 0:
+            if srch is None:
                 self.cur.execute(insrt_vis, (name_, surname, patron, passport, phone, gender.lower()))
                 self.conn.commit()
-                self.cur.execute(serach_query, (name_, surname, patron, str(passport)))
+                self.cur.execute(serach_query, (name_, surname, patron, passport))
                 srch = self.cur.fetchone()
-            self.cur.execute(search_room_time, (room_type.lower(), start_date, end_date))
+            self.cur.execute(search_room_time, (room_type.lower(), start_date, end_date, start_date, end_date,
+                                                start_date, end_date, start_date, end_date))
             room_id = self.cur.fetchone()
-            if len(room_id) == 0:
+            if room_id is None:
                 self.show_box('Внимание', 'На текущий промежуток нет свободных комнат!')
                 return
-            self.cur.execute(insrt_book, (srch[0], room_id, start_date, end_date))
+            self.cur.execute(insrt_book, (srch[0], int(room_id[0]), start_date, end_date))
             self.conn.commit()
-            self.cur.execute(room_price, (room_type,))
+            self.cur.execute(room_price, (room_type.lower(),))
             price = self.cur.fetchone()[0]
-            real_price = (datetime.datetime.strptime(end_date, "%Y-%m-%d")
-                          - datetime.datetime.strptime(start_date, "%Y-%m-%d")).days * price
-            self.succesffull_booking([name, gender, real_price, room_type, room_id, passport, phone, start_date, end_date])
+            real_price = ((datetime.datetime.strptime(end_date, "%Y-%m-%d")
+                          - datetime.datetime.strptime(start_date, "%Y-%m-%d")).days + 1) * int(price)
+            self.succesffull_booking(
+                [name, gender, str(real_price), room_type, str(room_id), str(passport), phone, start_date, end_date])
             self.show_box('Информация', 'Вы успешно забронировали номер!')
         except Exception:
             self.show_box('Что-то пошло не так', 'Пожалуйста повторите позже!')
 
-    def cancel_room(self, name, phone, passport, gender, room_type, start_date, end_date):
+    def cancel_room(self, name, phone, passport, room_type, start_date, end_date):
         if not validate_info(name, phone, passport):
             self.show_box("Ошибка", "Вы ввели некорректные данные, попробуйте ещё раз!")
             return
         surname, name_, patron = [(i.lower()).capitalize() for i in name.split()]
         start_date, end_date = '-'.join(str(i) for i in start_date), '-'.join(str(i) for i in end_date)
         try:
-            self.cur.execute(search_booking_pos, (passport,))
+            self.cur.execute(search_booking_pos, (passport, start_date, end_date))
             res = self.cur.fetchone()
-            if len(res) == 0:
+            if res is None:
                 self.show_box("Ошибка", "Вы не никогда не бронировали номер в нашем отеле или были удалены из базы!")
                 return
-            self.cur.execute(cancel_booking, (res[0], start_date, end_date))
+            self.cur.execute(cancel_booking, (res[0],))
             self.conn.commit()
+            self.last_booking_info = {"SNP": '', "Gender": '', "Price": 0, "Room_type": "",
+                                  "Room_id": 0, "Passport": '', "Telephone": '',
+                                  "Date_start": '', "Date_end": ''}
+            self.receipt.setText("Вы отменили бронь, но здесь всё также будет отображаться информация о бронировании!")
+            self.show_box('Информация', "Вы успешно отменили бронь!")
         except Exception:
-            self.show_box('Ошибка', 'Внимание, скорее всего вы ошиблись при вводе данных, убедитесь что всё ввели правильно!')
-
+            self.show_box('Ошибка',
+                          'Внимание, скорее всего вы ошиблись при вводе данных, убедитесь что всё ввели правильно!')
 
     def book_action(self):
         # Получение данных из полей ввода
@@ -184,17 +195,7 @@ class HotelBookingApp(QMainWindow):
         if self.book_button.text() == "Забронировать":
             self.book_room(name, phone, passport, gender, room_type, start_date, end_date)
         else:
-            self.cancel_room(name, phone, passport, gender, room_type, start_date, end_date)
-
-    def show_book_dialog(self, statement):
-        # Окно для бронирования
-        book_dialog = QMessageBox(self)
-        book_dialog.setWindowTitle('Информация о бронировании')
-        if statement is True:
-            book_dialog.setText('Вы успешно забронировали номер!')
-        else:
-            book_dialog.setText('Вы не смогли забронировать номер, на это время он уже занят!')
-        book_dialog.exec()
+            self.cancel_room(name, phone, passport, room_type, start_date, end_date)
 
     # endregion
 
@@ -255,20 +256,21 @@ class HotelBookingApp(QMainWindow):
     def get_receiption(self):
         if self.last_booking_info['SNP'] == '':
             self.show_box('Внимание', 'Вы не бронировали комнату или уже отменили на неё бронь!')
+            return
         directory = QFileDialog.getExistingDirectory(
             self,
             "Выберите папку для сохранения чека:"
         )
 
-        with open(f'{directory}{self.last_booking_info["SNP"]}_receipt.txt', 'w') as file:
+        with open(path.join(f'{directory}', f'{self.last_booking_info["SNP"]}_receipt.txt'), encoding='utf-8', mode='w') as file:
             file.write(f'Гость: {self.last_booking_info["SNP"]}\nПаспорт: {self.last_booking_info["Passport"]}\n'
-                f'Телефон: {self.last_booking_info["Telephone"]}\n'
-                f'Пол: {self.last_booking_info["Gender"]}\n'
-                f'Номер комнаты: {self.last_booking_info["Room_id"]}\n'
-                f'Тип комнаты: {self.last_booking_info["Room_type"]}\n'
-                f'Стоимость: {self.last_booking_info["Price"]}\n'
-                f'Дата заселения: {self.last_booking_info["Date_start"]}\n'
-                f'Дата выселения: {self.last_booking_info["Date_end"]}\n')
+                       f'Телефон: {self.last_booking_info["Telephone"]}\n'
+                       f'Пол: {self.last_booking_info["Gender"]}\n'
+                       f'Номер комнаты: {self.last_booking_info["Room_id"]}\n'
+                       f'Тип комнаты: {self.last_booking_info["Room_type"]}\n'
+                       f'Стоимость: {self.last_booking_info["Price"]}\n'
+                       f'Дата заселения: {self.last_booking_info["Date_start"]}\n'
+                       f'Дата выселения: {self.last_booking_info["Date_end"]}\n')
         self.show_box('Информация', 'Спасибо что вы с нами!')
 
     def show_receipt(self):

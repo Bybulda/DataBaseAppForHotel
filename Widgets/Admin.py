@@ -2,10 +2,11 @@ import configparser
 import sys
 
 import psycopg2
+import os.path as path
 from query.adminQuery import *
 from PyQt6.QtCore import QDateTime
 from PyQt6.QtWidgets import QMainWindow, QPushButton, QTabWidget, QApplication, QWidget, QTableWidget, QVBoxLayout, \
-    QLineEdit, QLabel, QDateTimeEdit, QComboBox, QTableWidgetItem, QMessageBox
+    QLineEdit, QLabel, QDateTimeEdit, QComboBox, QTableWidgetItem, QMessageBox, QFileDialog
 
 
 class AdminWindow(QMainWindow):
@@ -72,19 +73,42 @@ class AdminWindow(QMainWindow):
             ["ID Расписания", "ID Задачи", "ID Персонала", "ID Комнаты", "Дата начала", "Дата конца", "Занятость"])
         self.refresh_view = QPushButton("Обновить таблицы")
         self.refresh_view.clicked.connect(self.refresh_accept)
+        self.get_csv = QPushButton("Выгрузить таблицы")
+        self.get_csv.clicked.connect(self.upload_csv)
         self.empl_label = QLabel("Таблица сотрудников")
         self.schdl_label = QLabel("Таблица расписания задач")
-        view_widget_layout.addWidget(self.refresh_view)
         view_widget_layout.addWidget(self.empl_label)
         view_widget_layout.addWidget(self.view_employee)
         view_widget_layout.addWidget(self.schdl_label)
         view_widget_layout.addWidget(self.view_schedule)
+        view_widget_layout.addWidget(self.refresh_view)
+        view_widget_layout.addWidget(self.get_csv)
         view_widget.setLayout(view_widget_layout)
         return view_widget
 
+    def upload_csv(self):
+        view_schdl = self.view_schedule
+        view_emp = self.view_employee
+        if self.view_employee.item(0, 0) is None or view_schdl.item(0, 0) is None:
+            self.show_box('Ошибка', "Таблица пуста, пожалуйста, нажмите на кнопку обновить!")
+            return
+        schedule = [[f"\'{view_schdl.item(row, col).text()}\'" for col in range(view_schdl.columnCount())] for row in range(view_schdl.rowCount())]
+        empl = [[f"\'{view_emp.item(row, col).text()}\'" for col in range(view_emp.columnCount())] for row in range(view_emp.rowCount())]
+        directory = QFileDialog.getExistingDirectory(
+            self,
+            "Выберите папку для сохранения таблиц:"
+        )
+        with open(path.join(directory, 'task_schedule.csv'), mode='w', encoding='utf-8') as schdlf, open(path.join(directory, 'employees.csv'), mode='w', encoding='utf-8') as emplf:
+            schdlf.write("ID Расписания;ID Задачи;ID Персонала;ID Комнаты;Дата начала;Дата конца;Занятость\n")
+            for i in schedule:
+                schdlf.write(f"{';'.join(i)}\n")
+            emplf.write("ID Сотрудника;ФИО;Паспорт;Опыт;Зарплата\n")
+            for i in empl:
+                emplf.write(f"{';'.join(i)}\n")
+        print(schedule)
+        print(empl)
+
     def refresh_accept(self):
-        # query_emp = 'select * from staff'
-        # query_tasks = 'select * from schedule'
         self.cur.execute(query_emp)
         emp_res = self.cur.fetchall()
 
@@ -148,33 +172,36 @@ class AdminWindow(QMainWindow):
         return remove_visitor_tab
 
     def search_visitor(self):
-        surname, name, patronymic = (i.lower().capitalize() for i in self.fio_line_edit.text().split())
-        passport = int(self.passport_line_edit.text())
-        self.cur.execute(search_user_query, (name, surname, patronymic, passport))
-        res = self.cur.fetchone()
-        if len(res) == 0:
-            self.show_box('Ошибка', "Пользователь не найден!")
-            return
-        table_for = []
-        fio = []
-        for i, j in enumerate(res):
-            if 0 < i < 4:
-                fio.append(j)
-                continue
-            elif i == 4:
-                table_for.append(' '.join(fio))
-            table_for.append(j)
+        try:
+            surname, name, patronymic = (i.lower().capitalize() for i in self.fio_line_edit.text().split())
+            passport = int(self.passport_line_edit.text())
+            self.cur.execute(search_user_query, (name, surname, patronymic, passport))
+            res = self.cur.fetchone()
+            if res is None:
+                self.show_box('Ошибка', "Пользователь не найден!")
+                return
+            table_for = []
+            fio = []
+            for i, j in enumerate(res):
+                if 0 < i < 4:
+                    fio.append(j)
+                    continue
+                elif i == 4:
+                    table_for.append(' '.join(fio))
+                table_for.append(j)
 
-        self.visitor_table_widget.insertRow(0)
-        for col, item in enumerate(table_for):
-            self.visitor_table_widget.setItem(0, col, QTableWidgetItem(str(item)))
+            self.visitor_table_widget.insertRow(0)
+            for col, item in enumerate(table_for):
+                self.visitor_table_widget.setItem(0, col, QTableWidgetItem(str(item)))
+        except:
+            self.show_box("Внимание", "Ошибка в вводе данных!")
 
     def delete_visitor(self):
         if self.visitor_table_widget.item(0, 0) is None:
             self.show_box('Ошибка удаления', "Пожалуйста, для начала нажмите на кнопку \"Найти пользователя\" и убедитесь что информацию о нем вывело на экран!")
             return
 
-        passport = int(self.visitor_table_widget.item(0, 2))
+        passport = self.visitor_table_widget.item(0, 2).text()
         self.visitor_table_widget.clearContents()
         self.visitor_table_widget.removeRow(0)
         self.cur.execute(delete_user_query, (passport,))
@@ -291,7 +318,7 @@ class AdminWindow(QMainWindow):
         layout.addWidget(self.salary_line_edit)
 
         # Button for managing employee based on selected action
-        self.employee_button = QPushButton("Добавить пользователя", self)
+        self.employee_button = QPushButton("Добавить сотрудника", self)
         self.employee_button.clicked.connect(self.manage_employee)
         layout.addWidget(self.employee_button)
 
@@ -343,12 +370,11 @@ class AdminWindow(QMainWindow):
         self.employee_table_widget.clearContents()
         self.employee_table_widget.removeRow(0)
         self.employee_table_widget.insertRow(0)
-        id_, *snp, passport, exp, salary = info
+        id_, name, surname, patron, passport, exp, salary = list(info)
+        snp = f'{surname} {name} {patron}'
         salary = salary if upd is None else upd
         for col, item in enumerate((id_, snp, passport, exp, salary)):
             self.employee_table_widget.setItem(0, col, QTableWidgetItem(str(item)))
-
-
 
     def delete_employee(self):
         try:
@@ -356,12 +382,12 @@ class AdminWindow(QMainWindow):
             passport = self.passport_emp.text()
             self.cur.execute(search_empl_query, (passport, name, surname, patronymic))
             res = self.cur.fetchone()
-            if len(res) == 0:
+            if res is None:
                 self.show_box('Внимание', 'Такого сотрудника не существует! Пожалуйста, проверьте данные!')
                 return
             self.cur.execute(delete_empl_query, (passport, name, surname, patronymic))
             self.conn.commit()
-            self.show_employees(res[0])
+            self.show_employees(res)
             self.show_box("Информация", "Вы успешно удалили сотрудника")
         except Exception:
             self.show_box('Ошибка', 'Произошла ошибка в обработке запроса, возможно вы ввели неправильные данные')
@@ -371,14 +397,17 @@ class AdminWindow(QMainWindow):
             surname, name, patronymic = self.fio_emp.text().split()
             passport = self.passport_emp.text()
             salary = self.salary_line_edit.text()
+            exp = self.experience_line_edit.text()
             self.cur.execute(search_empl_query, (passport, name, surname, patronymic))
             res = self.cur.fetchone()
-            if len(res) == 0:
-                self.show_box('Внимание', 'Такого сотрудника не существует! Пожалуйста, проверьте данные!')
+            if res is not None:
+                self.show_box('Внимание', 'Такого сотрудника уже существует! Пожалуйста, проверьте данные!')
                 return
-            self.cur.execute(update_salary, (salary, passport, name, surname, patronymic))
+            self.cur.execute(add_empl_query, (name, surname, patronymic, passport, exp, salary))
             self.conn.commit()
-            self.show_employees(res[0])
+            self.cur.execute(search_empl_query, (passport, name, surname, patronymic))
+            res = self.cur.fetchone()
+            self.show_employees(res)
             self.show_box("Информация", "Вы успешно изменили зарплату сотрудника")
         except Exception:
             self.show_box('Ошибка', 'Произошла ошибка в обработке запроса, возможно вы ввели неправильные данные')
@@ -390,12 +419,12 @@ class AdminWindow(QMainWindow):
             salary = self.salary_line_edit.text()
             self.cur.execute(search_empl_query, (passport, name, surname, patronymic))
             res = self.cur.fetchone()
-            if len(res) == 0:
+            if res is None:
                 self.show_box('Внимание', 'Такого сотрудника не существует! Пожалуйста, проверьте данные!')
                 return
             self.cur.execute(update_salary, (salary, passport, name, surname, patronymic))
             self.conn.commit()
-            self.show_employees(res[0], salary)
+            self.show_employees(res, salary)
             self.show_box("Информация", "Вы успешно изменили зарплату сотрудника")
         except Exception:
             self.show_box('Ошибка', 'Произошла ошибка в обработке запроса, возможно вы ввели неправильные данные')
