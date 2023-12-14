@@ -7,8 +7,9 @@ from Admin import AdminWindow
 
 
 class AuthWindow(QDialog):
-    def __init__(self):
+    def __init__(self, app):
         super().__init__()
+        self.app = app
 
         self.setWindowTitle('Аутентификация')
         self.config_file = '../config/config.ini'
@@ -49,7 +50,7 @@ class AuthWindow(QDialog):
             self.auth_error()
 
     def start_admin_session(self):
-        self.admin_window = AdminWindow()
+        self.admin_window = AdminWindow(self.app)
         self.admin_window.show()
         self.accept()
 
@@ -57,7 +58,7 @@ class AuthWindow(QDialog):
 def main():
     app = QApplication(sys.argv)
 
-    start_window = AuthWindow()
+    start_window = AuthWindow(app)
     if start_window.exec() == QDialog.DialogCode.Accepted:
         sys.exit(app.exec())
 

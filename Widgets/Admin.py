@@ -10,9 +10,13 @@ from PyQt6.QtWidgets import QMainWindow, QPushButton, QTabWidget, QApplication, 
 
 
 class AdminWindow(QMainWindow):
-    def __init__(self, config_file='../config/config.ini'):
+    def __init__(self, app):
         super().__init__()
-        self.open_connection(config_file)
+        self.app = app
+        self.open_connection('../config/config_yan.ini'
+                             if len(self.app.instance().arguments()) > 1
+                             and self.app.instance().arguments()[1] == "yan"
+                             else '../config/config.ini')
         self.init_ui()
 
     def __del__(self):
@@ -23,7 +27,10 @@ class AdminWindow(QMainWindow):
         config = configparser.ConfigParser()
         config.read(config_file)
         self.conn = psycopg2.connect(user=config.get("database", "username"),
-                                     password=config.getint("database", "password"),
+                                     password=(config.get("database", "password")
+                                               if len(self.app.instance().arguments()) > 1
+                                               and self.app.instance().arguments()[1] == "yan"
+                                               else config.getint("database", "password")),
                                      host=config.get("database", "host"),
                                      port=config.get("database", "port"),
                                      database=config.get("database", "database"),
@@ -484,7 +491,7 @@ class AdminWindow(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
-    window = AdminWindow()
+    window = AdminWindow(app)
     window.show()
     sys.exit(app.exec())
 

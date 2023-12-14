@@ -24,13 +24,17 @@ def validate_info(name, phone, passport):
 
 
 class HotelBookingApp(QMainWindow):
-    def __init__(self, config_file='../config/config.ini'):
+    def __init__(self, app):
         super().__init__()
+        self.app = app
         self.last_booking_info = {"SNP": '', "Gender": '', "Price": 0, "Room_type": "",
                                   "Room_id": 0, "Passport": '', "Telephone": '',
                                   "Date_start": '', "Date_end": ''}
         self.status_booking = False
-        self.open_connection(config_file)
+        self.open_connection('../config/config_yan.ini'
+                             if len(self.app.instance().arguments()) > 1
+                             and self.app.instance().arguments()[1] == "yan"
+                             else '../config/config.ini')
 
         self.init_ui()
 
@@ -59,7 +63,10 @@ class HotelBookingApp(QMainWindow):
         config = configparser.ConfigParser()
         config.read(config_file)
         self.conn = psycopg2.connect(user=config.get("database", "username"),
-                                     password=config.getint("database", "password"),
+                                     password=(config.get("database", "password")
+                                               if len(self.app.instance().arguments()) > 1
+                                               and self.app.instance().arguments()[1] == "yan"
+                                               else config.getint("database", "password")),
                                      host=config.get("database", "host"),
                                      port=config.get("database", "port"),
                                      database=config.get("database", "database"),
@@ -115,12 +122,13 @@ class HotelBookingApp(QMainWindow):
 
     def succesffull_booking(self, book_info):
         self.receipt.setText(
-            f'Уважаемый гость: {book_info[0]}, вы успешно забронировали комнату!\nБронирование содержит следующую информацию:\n '
+            f'Уважаемый гость: {book_info[0]}, вы успешно забронировали комнату!\nБронирование содержит следующую информацию:\n'
             f'ФИО посетителя: {book_info[0]}\n'
             f'Пол: {book_info[1]}\n'
             f'Паспорт: {book_info[5]}\nТип комнаты: {book_info[3]}\n'
             f'Дата заселения: {book_info[-2]}\n'
-            f'Дата выселения: {book_info[-1]}\nСтоимость: {book_info[2]}')
+            f'Дата выселения: {book_info[-1]}\n'
+            f'Стоимость: {"{0:,}".format(int(book_info[2]))} руб.')
         for i, key in enumerate(self.last_booking_info.keys()):
             self.last_booking_info[key] = book_info[i]
 
@@ -156,9 +164,9 @@ class HotelBookingApp(QMainWindow):
             real_price = ((datetime.datetime.strptime(end_date, "%Y-%m-%d")
                           - datetime.datetime.strptime(start_date, "%Y-%m-%d")).days + 1) * int(price)
             self.succesffull_booking(
-                [name, gender, str(real_price), room_type, str(room_id), str(passport), phone, start_date, end_date])
+                [name, gender, str(real_price), room_type, str(room_id[0]), str(passport), phone, start_date, end_date])
             self.show_box('Информация', 'Вы успешно забронировали номер!')
-        except Exception:
+        except Exception as ex:
             self.show_box('Что-то пошло не так', 'Пожалуйста повторите позже!')
 
     def cancel_room(self, name, phone, passport, room_type, start_date, end_date):
@@ -263,13 +271,13 @@ class HotelBookingApp(QMainWindow):
             "Выберите папку для сохранения чека:"
         )
 
-        with open(path.join(f'{directory}', f'{self.last_booking_info["SNP"]}_receipt.txt'), encoding='utf-8', mode='w') as file:
+        with open(path.join(f'{directory}', f'{self.last_booking_info["SNP"].replace(" ", "_")}_receipt.txt'), encoding='utf-8', mode='w') as file:
             file.write(f'Гость: {self.last_booking_info["SNP"]}\nПаспорт: {self.last_booking_info["Passport"]}\n'
                        f'Телефон: {self.last_booking_info["Telephone"]}\n'
                        f'Пол: {self.last_booking_info["Gender"]}\n'
                        f'Номер комнаты: {self.last_booking_info["Room_id"]}\n'
                        f'Тип комнаты: {self.last_booking_info["Room_type"]}\n'
-                       f'Стоимость: {self.last_booking_info["Price"]}\n'
+                       f'Стоимость: {"{0:,}".format(int(self.last_booking_info["Price"]))} руб.\n'
                        f'Дата заселения: {self.last_booking_info["Date_start"]}\n'
                        f'Дата выселения: {self.last_booking_info["Date_end"]}\n')
         self.show_box('Информация', 'Спасибо что вы с нами!')
@@ -281,7 +289,7 @@ class HotelBookingApp(QMainWindow):
         ''')
         self.get_reciept = QPushButton("Получить чек в формате txt")
         self.get_reciept.clicked.connect(self.get_receiption)
-        self.receipt.setAlignment(Qt.AlignmentFlag.AlignJustify | Qt.AlignmentFlag.AlignHCenter)
+        self.receipt.setAlignment(Qt.AlignmentFlag.AlignJustify | Qt.AlignmentFlag.AlignLeft)
         self.receipt.setWordWrap(False)
         layout = QVBoxLayout(self)
         layout.addWidget(self.receipt)
@@ -293,7 +301,7 @@ class HotelBookingApp(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
-    window = HotelBookingApp()
+    window = HotelBookingApp(app)
     window.show()
     sys.exit(app.exec())
 
