@@ -10,7 +10,7 @@ add_empl_query = '''Insert into staff(name, surname, patronymic, passport, exper
 update_salary = '''update staff set salary = %s where passport = %s and name = %s and surname = %s and patronymic = %s'''
 
 
-search_task_query = '''select * from schedule where staff_id = %s and task_id = %s and room_id = %s and date = %s 
+search_task_query = '''select schedule_id from schedule where staff_id = %s and task_id = %s and room_id = %s and date = %s 
 and date_end = %s and ordered = %s'''
 delete_task_query = '''delete from schedule where schedule_id = %s'''
 insert_task_query = '''insert into schedule(task_id, staff_id, room_id, date, date_end, ordered) values (%s, %s, %s, %s, %s, %s)'''

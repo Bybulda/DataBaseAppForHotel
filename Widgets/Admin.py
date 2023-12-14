@@ -92,8 +92,8 @@ class AdminWindow(QMainWindow):
         if self.view_employee.item(0, 0) is None or view_schdl.item(0, 0) is None:
             self.show_box('Ошибка', "Таблица пуста, пожалуйста, нажмите на кнопку обновить!")
             return
-        schedule = [[f"\'{view_schdl.item(row, col).text()}\'" for col in range(view_schdl.columnCount())] for row in range(view_schdl.rowCount())]
-        empl = [[f"\'{view_emp.item(row, col).text()}\'" for col in range(view_emp.columnCount())] for row in range(view_emp.rowCount())]
+        schedule = [[f"{view_schdl.item(row, col).text()}" for col in range(view_schdl.columnCount())] for row in range(view_schdl.rowCount())]
+        empl = [[f"{view_emp.item(row, col).text()}" for col in range(view_emp.columnCount())] for row in range(view_emp.rowCount())]
         directory = QFileDialog.getExistingDirectory(
             self,
             "Выберите папку для сохранения таблиц:"
@@ -111,7 +111,8 @@ class AdminWindow(QMainWindow):
     def refresh_accept(self):
         self.cur.execute(query_emp)
         emp_res = self.cur.fetchall()
-
+        self.view_employee.setRowCount(0)
+        self.view_employee.clearContents()
         for row, employee in enumerate(emp_res):
             self.view_employee.insertRow(row)
             snp = []
@@ -128,7 +129,8 @@ class AdminWindow(QMainWindow):
 
         self.cur.execute(query_tasks)
         schdl_res = self.cur.fetchall()
-
+        self.view_schedule.setRowCount(0)
+        self.view_schedule.clearContents()
         for row, task in enumerate(schdl_res):
             self.view_schedule.insertRow(row)
             for col, item in enumerate(task):
@@ -216,7 +218,7 @@ class AdminWindow(QMainWindow):
         add_task_tab = QWidget()
         add_task_layout = QVBoxLayout()
         self.task_manager = QComboBox(self)
-        self.task_manager.addItems([ 'Добавить задачу', 'Удалить задачу'])
+        self.task_manager.addItems(['Добавить задачу', 'Удалить задачу'])
         self.task_manager.currentIndexChanged.connect(self.update_task_ui)
         self.id_line_edit = QLineEdit(self)
         self.task_line_edit = QLineEdit(self)
@@ -255,7 +257,7 @@ class AdminWindow(QMainWindow):
 
         # Button to add task
         self.add_button = QPushButton('Добавить задачу', self)
-        self.add_button.clicked.connect(self.add_task)
+        self.add_button.clicked.connect(self.manage_task)
         add_task_layout.addWidget(self.add_button)
 
         add_task_tab.setLayout(add_task_layout)
@@ -274,16 +276,58 @@ class AdminWindow(QMainWindow):
             self.add_button.setText("Добавить задачу")
 
     def delete_task(self):
-        # Логика удаления задачи из расписания
-        pass
+        ids, task, room = self.id_line_edit.text(), self.task_line_edit.text(), self.room_line_edit.text()
+        start, end = self.convert_data(self.start_datetime_edit.text(), self.end_datetime_edit.text())
+        ordered = 'true' if self.availability_line.currentText() == 'Комната занята' else 'false'
+        try:
+            self.cur.execute(search_task_query, (ids, task, room, start, end, ordered))
+            res = self.cur.fetchone()
+            if res is None:
+                self.show_box('Внимание', 'Произошла ошибка, такого задания не существует!')
+                return
+
+            self.cur.execute(delete_task_query, (int(res[0]),))
+            self.conn.commit()
+            self.show_schedule(ids, task, room, start, end, ordered)
+            self.show_box('Информация', 'Вы успешно удалили задачу!')
+        except Exception:
+            self.show_box('Внимание', 'Произошла ошибка, возможно, вы указали неправильные данные!')
+
+    def manage_task(self):
+        if self.add_button.text() == 'Добавить задачу':
+            self.add_task()
+        else:
+            self.delete_task()
+
+
+    def convert_data(self, start, end):
+        start = start.split()
+        date_s = start[0].split('.')
+        date_s[0], date_s[-1] = date_s[-1], date_s[0]
+        start_res = ' '.join(('-'.join(date_s), start[-1]))
+        end = end.split()
+        date_s = end[0].split('.')
+        date_s[0], date_s[-1] = date_s[-1], date_s[0]
+        end_res = ' '.join(('-'.join(date_s), end[-1]))
+        return start_res, end_res
 
     def add_task(self):
-        # Логика добавления задачи в расписание
-        pass
-
-    def show_schedule(self):
-        # Логика вывода расписания
-        pass
+        ids, task, room = self.id_line_edit.text(), self.task_line_edit.text(), self.room_line_edit.text()
+        start, end = self.convert_data(self.start_datetime_edit.text(), self.end_datetime_edit.text())
+        ordered = 'true' if self.availability_line.currentText() == 'Комната занята' else 'false'
+        try:
+            self.cur.execute(insert_task_query, (task, ids, room, start, end, ordered))
+            self.conn.commit()
+            self.show_schedule(ids, task, room, start, end, ordered)
+            self.show_box('Информация', 'Вы успешно добавили задачу!')
+        except Exception:
+            self.show_box('Внимание', 'Произошла ошибка, возможно, вы указали неправильные данные!')
+    def show_schedule(self, staff, task, room, start, end, order):
+        if self.table_widget.rowCount() == 0:
+            self.table_widget.insertRow(0)
+        self.table_widget.clearContents()
+        for col, item in enumerate((staff, task, room, start, end, order)):
+            self.table_widget.setItem(0, col, QTableWidgetItem(str(item)))
 
     # endregion task
     # region employee
