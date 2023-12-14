@@ -22,16 +22,17 @@ class AdminWindow(QMainWindow):
     def open_connection(self, config_file):
         config = configparser.ConfigParser()
         config.read(config_file)
-        self.conn = psycopg2.connect(user=config.get("databaseN", "username"),
-                                     password=config.getint("databaseN", "password"),
-                                     host=config.get("databaseN", "host"),
-                                     port=config.get("databaseN", "port"),
-                                     database=config.get("databaseN", "database"),
-                                     options="-c search_path=" + config.get("databaseN", "schema"))
+        self.conn = psycopg2.connect(user=config.get("database", "username"),
+                                     password=config.getint("database", "password"),
+                                     host=config.get("database", "host"),
+                                     port=config.get("database", "port"),
+                                     database=config.get("database", "database"),
+                                     options="-c search_path=" + config.get("database", "schema"))
         self.cur = self.conn.cursor()
 
     def init_ui(self):
         self.setWindowTitle('Управление отелем')
+        self.resize(800, 600)
 
         self.tab_widget = QTabWidget()
 
